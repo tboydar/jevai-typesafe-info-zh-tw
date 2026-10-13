@@ -1,4 +1,8 @@
-/* Jev 決策測試台 — 前端邏輯 */
+/* Jev 決策測試台 — 前端邏輯
+ * 雙模式：
+ *   - proxy 模式：由本機 bun + hono server 代理（/api/systemone），可無金鑰離線模擬
+ *   - static 模式：GitHub Pages 靜態部署，直接從瀏覽器呼叫使用者的端點＋Token
+ */
 
 const $ = (sel) => document.querySelector(sel);
 const questionsEl = $("#questions");
@@ -8,16 +12,84 @@ const resultPanel = $("#result-panel");
 const summaryEl = $("#summary");
 const rawEl = $("#raw");
 
+const LS_KEY = "jevai_settings";
+const DEFAULT_ENDPOINT = "https://api.typesafe.ai/v1/systemone";
+
+let mode = "proxy"; // 'proxy' | 'static'
 let questionRows = [];
 
-function el(tag, attrs = {}, text = "") {
-  const node = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) {
-    if (k === "class") node.className = v;
-    else node.setAttribute(k, v);
+/* ── 設定（Token + 端點）──────────────────── */
+function loadSettings() {
+  try { return JSON.parse(localStorage.getItem(LS_KEY)) || {}; }
+  catch { return {}; }
+}
+function saveSettings(s) {
+  localStorage.setItem(LS_KEY, JSON.stringify(s));
+}
+function getToken() { return ($("#token").value || "").trim(); }
+function getEndpoint() {
+  const preset = $("#endpoint-preset").value;
+  if (preset !== "__custom__") return preset;
+  const e = ($("#endpoint").value || "").trim();
+  return e || DEFAULT_ENDPOINT;
+}
+
+function initSettings() {
+  const s = loadSettings();
+  if (s.token) $("#token").value = s.token;
+  if (s.endpoint && s.endpoint !== DEFAULT_ENDPOINT) {
+    $("#endpoint-preset").value = "__custom__";
+    $("#endpoint").value = s.endpoint;
+    $("#endpoint").hidden = false;
   }
-  if (text) node.textContent = text;
-  return node;
+  $("#token").oninput = () => { const t = loadSettings(); t.token = getToken(); saveSettings(t); };
+  $("#endpoint-preset").onchange = () => {
+    const custom = $("#endpoint-preset").value === "__custom__";
+    $("#endpoint").hidden = !custom;
+    persistEndpoint();
+  };
+  $("#endpoint").oninput = persistEndpoint;
+  $("#toggle-token").onclick = () => {
+    const t = $("#token");
+    t.type = t.type === "password" ? "text" : "password";
+  };
+}
+function persistEndpoint() {
+  const t = loadSettings();
+  t.endpoint = getEndpoint();
+  saveSettings(t);
+}
+
+/* ── 模式偵測 ────────────────────────────── */
+async function detectMode() {
+  try {
+    const res = await fetch("/api/health", { method: "GET", cache: "no-store" });
+    if (res.ok) {
+      const h = await res.json();
+      return h.mock ? "mock" : "proxy";
+    }
+  } catch { /* 沒有後端 → 靜態模式 */ }
+  return "static";
+}
+
+function renderModeBanner() {
+  const banner = $("#mode-banner");
+  banner.hidden = false;
+  const dot = $("#mode-dot");
+  if (mode === "static") {
+    banner.className = "banner transpose";
+    dot.style.background = "var(--accent)";
+    $("#mode-text").textContent = "GitHub Pages 靜態模式：請在上方填入 API Token（可選自訂端點），將直接從瀏覽器呼叫。";
+  } else if (mode === "mock") {
+    banner.className = "banner mock";
+    dot.style.background = "var(--warn)";
+    $("#mode-text").textContent = "離線模擬模式：未設定 TYPESAFE_API_KEY，目前回傳模擬回答（僅供測試 UI）。";
+  } else {
+    banner.className = "banner live";
+    dot.style.background = "var(--ok)";
+    $("#mode-text").textContent = "真實模式：已偵測到後端 proxy，將由本機伺服器呼叫 api.typesafe.ai。";
+  }
+  $("#conn-msg").textContent = mode === "static" ? "Token 僅存於本瀏覽器 localStorage，不會外送。" : "此模式由後端 proxy 處理金鑰，前端不需填 Token。";
 }
 
 /* ── 問題列 ─────────────────────────────── */
@@ -25,7 +97,7 @@ function typeMeta(type) {
   return {
     noul: { label: "noul（是/否・0–1）", criteriaNeeded: false, criteriaPlaceholder: "(不需 criteria)" },
     choice: { label: "choice（選項）", criteriaNeeded: true, criteriaPlaceholder: '{"billing":"帳務問題","bug":"產品異常"}' },
-    score: { label: "score（分數・2–10）", criteriaNeeded: false, criteriaPlaceholder: "(可選，如下方 legend 說明)" },
+    score: { label: "score（分數・2–10）", criteriaNeeded: false, criteriaPlaceholder: "(選填)" },
   }[type];
 }
 
@@ -55,9 +127,9 @@ function addQuestionRow(def = null) {
 
   const grid = el("div", { class: "q-grid" });
   grid.append(
-    field("name", "名稱（key）", "input", "text", "text", { placeholder: "topic" }),
-    field("type", "型別", "select", null, null, {}),
-    field("instructions", "說明（instructions）", "input", "text", "text", { placeholder: "這個問題在問什麼？" })
+    field("name", "名稱（key）", "input", null, { placeholder: "topic" }),
+    field("type", "型別", "select", null, {}),
+    field("instructions", "說明（instructions）", "input", null, { placeholder: "這個問題在問什麼？" })
   );
 
   const typeSel = grid.querySelector('select[name="type"]');
@@ -67,30 +139,19 @@ function addQuestionRow(def = null) {
   });
   typeSel.value = row.type;
 
-  // criteria（JSON 物件）
   const critWrap = el("div", { class: "q-criteria" });
-  const crit = el("textarea", {
-    class: "criteria",
-    name: "criteria",
-    rows: "2",
-    spellcheck: "false",
-  });
+  const crit = el("textarea", { class: "criteria", name: "criteria", rows: "2", spellcheck: "false" });
   crit.value = row.criteria;
   const critLabel = el("label", {}, "criteria（JSON 物件）");
   critWrap.append(critLabel, crit);
 
-  // 依型別切換 criteria 顯示/佔位
   function refreshFields() {
     const m = typeMeta(row.type);
-    critLabel.textContent = m.criteriaNeeded ? "criteria（JSON 物件）" : "criteria（選填）";
     crit.placeholder = m.criteriaPlaceholder;
-    critWrap.hidden = !m.criteriaNeeded; // noul 不顯示；choice/score 顯示
+    critWrap.hidden = !m.criteriaNeeded;
   }
 
-  typeSel.onchange = () => {
-    row.type = typeSel.value;
-    refreshFields();
-  };
+  typeSel.onchange = () => { row.type = typeSel.value; refreshFields(); };
   grid.querySelector('input[name="name"]').oninput = (e) => (row.name = e.target.value.trim());
   grid.querySelector('input[name="instructions"]').oninput = (e) => (row.instructions = e.target.value.trim());
   crit.oninput = (e) => (row.criteria = e.target.value.trim());
@@ -98,7 +159,6 @@ function addQuestionRow(def = null) {
   box.append(head, grid, critWrap);
   questionsEl.append(box);
 
-  // 預設第一個問題填入範例
   if (def) {
     grid.querySelector('input[name="name"]').value = def.name;
     grid.querySelector('input[name="instructions"]').value = def.instructions;
@@ -109,14 +169,22 @@ function addQuestionRow(def = null) {
   return row;
 }
 
-function field(name, label, tag, type, inputName, attrs = {}) {
+function field(name, label, tag, inputName, attrs = {}) {
   const wrap = el("div", {});
   wrap.append(el("label", { for: "f-" + name }, label));
-  const node = tag === "select"
-    ? el("select", { name, ...attrs })
-    : el("input", { name, type, "data-field": inputName, ...attrs });
-  wrap.append(node);
+  const attrs2 = Object.assign({ name }, attrs);
+  wrap.append(tag === "select" ? el("select", attrs2) : el("input", attrs2));
   return wrap;
+}
+
+function el(tag, attrs = {}, text = "") {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") node.className = v;
+    else node.setAttribute(k, v);
+  }
+  if (text) node.textContent = text;
+  return node;
 }
 
 function refreshQNumbers() {
@@ -132,22 +200,21 @@ function buildRequest() {
     const name = row.name.trim() || "q" + (questionRows.indexOf(row) + 1);
     const q = { type: row.type, instructions: row.instructions.trim() || "請判斷" };
     if (row.type !== "noul" && row.criteria.trim()) {
-      try {
-        q.criteria = JSON.parse(row.criteria);
-      } catch (e) {
-        statusEl.textContent = `問題「${name}」的 criteria 不是合法 JSON：${e.message}`;
-        statusEl.className = "status err";
+      try { q.criteria = JSON.parse(row.criteria); }
+      catch (e) {
+        setStatus(`問題「${name}」的 criteria 不是合法 JSON：${e.message}`, true);
         return null;
       }
     }
     questions[name] = q;
   }
-  if (Object.keys(questions).length === 0) {
-    statusEl.textContent = "請至少新增一個問題";
-    statusEl.className = "status err";
-    return null;
-  }
+  if (Object.keys(questions).length === 0) { setStatus("請至少新增一個問題", true); return null; }
   return { model: "jev-latest", state: stateEl.value.trim(), questions };
+}
+
+function setStatus(msg, isErr = false) {
+  statusEl.textContent = msg;
+  statusEl.className = isErr ? "status err" : "status";
 }
 
 async function run() {
@@ -156,27 +223,42 @@ async function run() {
 
   const runBtn = $("#run");
   runBtn.disabled = true;
-  statusEl.className = "status";
-  statusEl.textContent = "送出中…";
+  setStatus("送出中…");
   resultPanel.hidden = true;
 
+  let data, res;
   try {
-    const res = await fetch("/api/systemone", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(req),
-    });
-    const data = await res.json();
+    if (mode === "static") {
+      const token = getToken();
+      if (!token) {
+        setStatus("GitHub Pages 模式下請先在上方填入 API Token", true);
+        runBtn.disabled = false;
+        return;
+      }
+      res = await fetch(getEndpoint(), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
+        body: JSON.stringify(req),
+      });
+    } else {
+      res = await fetch("/api/systemone", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(req),
+      });
+    }
+    data = await res.json();
     if (!res.ok) {
-      statusEl.textContent = `API 錯誤：${data.error || res.status}`;
-      statusEl.className = "status err";
+      setStatus(`API 錯誤（${res.status}）：${data?.error || JSON.stringify(data) || res.statusText}`, true);
       return;
     }
     renderResult(data);
-    statusEl.textContent = `完成 · 模型 ${data.model || "—"}`;
+    setStatus(`完成 · 模型 ${data.model || "—"} · ${(data.usage?.input_tokens ?? "") ? `in:${data.usage.input_tokens} out:${data.usage.output_tokens}` : ""}`);
   } catch (e) {
-    statusEl.textContent = `請求失敗：${e.message}`;
-    statusEl.className = "status err";
+    setStatus(`請求失敗：${e.message}`, true);
   } finally {
     runBtn.disabled = false;
   }
@@ -184,13 +266,16 @@ async function run() {
 
 /* ── 渲染結果 ───────────────────────────── */
 function renderProbs(probs) {
-  if (!probs || typeof probs !== "object" || Object.keys(probs).length === 0) return "";
+  if (!probs || typeof probs !== "object") return "";
+  const keys = Object.keys(probs);
+  if (!keys.length) return "";
   const bars = el("div", { class: "bars" });
-  for (const [k, v] of Object.entries(probs)) {
+  for (const k of keys) {
+    const v = probs[k];
     const rowEl = el("div", { class: "bar-row" });
     const bar = el("div", { class: "bar" });
     bar.append(el("i", { style: `width:${Math.round(v * 100)}%` }));
-    rowEl.append(el("span", {}, k), bar, el("span", {}, (v * 100).toFixed(0) + "%"));
+    rowEl.append(el("span", { class: "bk" }, k), bar, el("span", {}, (v * 100).toFixed(0) + "%"));
     bars.append(rowEl);
   }
   return bars;
@@ -199,16 +284,15 @@ function renderProbs(probs) {
 function renderResult(data) {
   summaryEl.innerHTML = "";
   if (!data.answers || typeof data.answers !== "object") {
-    summaryEl.append(el("p", { class: "status err" }, "回應中沒有 answers"));
+    summaryEl.append(el("p", { class: "status err" }, "回應中沒有 answers：\n" + JSON.stringify(data, null, 2)));
     return;
   }
   for (const [name, ans] of Object.entries(data.answers)) {
     const card = el("div", { class: "answer" });
     const typeTag = el("span", { class: "type" }, ans.type);
-    card.append(el("div", { class: "qname" }, `${name}`), typeTag);
+    card.append(el("div", { class: "qname" }, name), typeTag);
 
-    let val = "";
-    let meta = "";
+    let val = "", meta = "";
     if (ans.type === "noul") {
       val = ans.noul;
       meta = ans.noul > 0.7 ? "傾向「是」" : ans.noul < 0.3 ? "傾向「否」" : "不確定";
@@ -217,43 +301,31 @@ function renderResult(data) {
       meta = `信心值 ${ans.confidence ?? "—"}`;
     } else if (ans.type === "score") {
       val = ans.score ?? "—";
-      meta = `信心值 ${ans.confidence ?? "—"}` + (ans.legend && ans.legend[Math.round(ans.score)] ? ` · ${ans.legend[Math.round(ans.score)]}` : "");
+      const lv = Math.round(ans.score);
+      meta = `信心值 ${ans.confidence ?? "—"}` + (ans.legend?.[lv] ? ` · ${ans.legend[lv]}` : "");
     }
-
     card.append(el("div", { class: "val" }, String(val)));
     if (meta) card.append(el("div", { class: "meta" }, meta));
-    const probs = renderProbs(ans.type === "choice" ? ans.probabilities : undefined);
+    const probs = renderProbs(ans.type === "choice" ? ans.probabilities : null);
     if (probs) card.append(probs);
     summaryEl.append(card);
   }
 
   rawEl.textContent = JSON.stringify(data, null, 2);
+  rawEl.scrollTop = 0;
   resultPanel.hidden = false;
 }
 
 /* ── 初始化 ─────────────────────────────── */
 async function init() {
+  initSettings();
+
   // 預設範例：帳務 triage
   addQuestionRow({ name: "topic", type: "choice", instructions: "這個問題的類別是？", criteria: '{"billing":"帳務/扣款問題","bug":"產品異常","other":"其他"}' });
   addQuestionRow({ name: "urgent", type: "noul", instructions: "需要立刻轉真人處理嗎？", criteria: "" });
 
-  // 模式橫幅
-  try {
-    const h = await (await fetch("/api/health")).json();
-    const banner = $("#mode-banner");
-    banner.hidden = false;
-    if (h.mock) {
-      banner.className = "banner mock";
-      $("#mode-dot").style.background = "var(--warn)";
-      $("#mode-text").textContent = "離線模擬模式：未設定 TYPESAFE_API_KEY，目前回傳模擬回答（僅供測試 UI）";
-    } else {
-      banner.className = "banner live";
-      $("#mode-dot").style.background = "var(--ok)";
-      $("#mode-text").textContent = "真實模式：已偵測到 TYPESAFE_API_KEY，將呼叫 api.typesafe.ai/v1/systemone";
-    }
-  } catch {
-    /* 忽略 */
-  }
+  mode = await detectMode();
+  renderModeBanner();
 
   $("#add-q").onclick = () => addQuestionRow();
   $("#run").onclick = run;

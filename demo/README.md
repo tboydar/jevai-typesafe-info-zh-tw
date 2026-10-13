@@ -16,6 +16,18 @@ export TYPESAFE_API_KEY=your_key_here
 bun run dev        # http://localhost:3000
 ```
 
+### GitHub Pages 靜態版（不需後端）
+
+線上試用：**https://tboydar.github.io/jevai-typesafe-info-zh-tw/**
+
+部署的 `demo/public/` 是**純靜態前端**，會自動偵測沒有後端後切換到「靜態模式」：
+
+- 在網頁上「連線設定」填入你自己的 **API Token**（存 localStorage，不送出伺服器）
+- **端點可選**：預設官方 `https://api.typesafe.ai/v1/systemone`，或選「自訂端點…」填其他 URL
+- 直接由瀏覽器呼叫該端點（需該端點允許 CORS）
+
+> 部署方式：`gh-pages` 由 [`.github/workflows/pages.yml`](../.github/workflows/pages.yml) 自動發布（push 到 `main` 時觸發）。
+
 ### 沒有金鑰也能跑（離線模擬模式）
 
 不設定 `TYPESAFE_API_KEY` 直接 `bun run dev` 即可。此時 `/api/systemone` 會回傳**模擬的決策回答**（見 `src/mock.ts`），頁面上方會顯示「離線模擬模式」橫幅，方便先測試 UI 流程。

@@ -8,7 +8,8 @@
 | 📄 模型參考文件 | [`Satvik-codes/jevai-info-typesafe`](https://github.com/Satvik-codes/jevai-info-typesafe) | Jev 1.13 概覽、決策原語、LLM 對比、使用案例 |
 | 🛠️ 開發者筆記 | [`codaaiteam/jev-typesafe-ai`](https://github.com/codaaiteam/jev-typesafe-ai) | 快速上手、curl 範例、常見使用案例、連結 |
 
-> 🧪 **想直接動手試？** 本倉庫附一個 **bun + hono 的 fullstack demo 網站**（`. /demo`），可編輯 state 與問題、即時查看決策結果；有 API 金鑰就真實呼叫，沒金鑰也有離線模擬模式。
+> 🧪 **想直接動手試？** 本倉庫附一個 **bun + hono 的 fullstack demo 網站**（`demo/`），可編輯 state 與問題、即時查看決策結果；有 API 金鑰就真實呼叫，沒金鑰也有離線模擬模式。
+> 也可在 **GitHub Pages 線上試用** → **https://tboydar.github.io/jevai-typesafe-info-zh-tw/**
 > 見 [`demo/README.md`](demo/README.md)。
 
 ---
@@ -135,8 +136,24 @@ curl -X POST https://api.typesafe.ai/v1/systemone \
 ## 目錄
 
 - [demo/](demo/) — bun + hono fullstack 測試網站
+- [demo/public/](demo/public/) — 純靜態前端（GitHub Pages 部署用，支援使用者自填 Token／端點）
 - [docs/04-use-cases.md](docs/04-use-cases.md) — 深入使用案例
 - [docs/sources.md](docs/sources.md) — 來源與整合說明、名詞對照
+
+---
+
+## 🌐 GitHub Pages（線上試用）
+
+靜態前端（`demo/public/`）會透過 GitHub Actions 自動部署到 **https://tboydar.github.io/jevai-typesafe-info-zh-tw/**。
+
+線上版（靜態模式）跟本機 server 版的差別：
+
+| 功能 | 本機 `bun run dev` | GitHub Pages 靜態 |
+|------|------------------|-------------------|
+| API Token | 由後端讀 `TYPESAFE_API_KEY` | 使用者在網頁「連線設定」填入（存 localStorage） |
+| 端點選擇 | 固定官方端點 | 可選**官方端點**或**填自訂端點** |
+| 無金鑰 | 離線模擬模式 | 需填 Token 才能呼叫 |
+| CORS | 由後端 proxy 解決 | 靠 API 允許跨域（自訂端點若擋 CORS 則無法直接呼叫） |
 
 ---
 
