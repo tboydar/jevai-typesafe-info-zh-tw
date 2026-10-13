@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Jev 測試台 — TypeSafe System One 決策模型</title>
+<link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <div class="eyebrow">Jevai · TypeSafe AI — System One 決策模型</div>
+    <h1>Jev 決策測試台</h1>
+    <p class="lede">給 Jev 一段程式狀態（state）與幾個問題，立即查看它回傳的<strong>型別化、校準化決策</strong>。</p>
+    <div id="mode-banner" class="banner" hidden>
+      <span id="mode-dot"></span><span id="mode-text"></span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="panel">
+    <h2>1 · 狀態（state）</h2>
+    <p class="hint">程式目前的狀態、內容或脈絡文字。</p>
+    <textarea id="state" rows="3" spellcheck="false">Customer: I was charged twice and I am furious. They are asking for a refund immediately.</textarea>
+  </section>
+
+  <section class="panel">
+    <div class="row-head">
+      <h2>2 · 問題（questions）</h2>
+      <button id="add-q" class="btn ghost" type="button">＋ 新增問題</button>
+    </div>
+    <div id="questions"></div>
+  </section>
+
+  <section class="actions">
+    <button id="run" class="btn primary" type="button">▶ 送出決策請求</button>
+    <span id="status" class="status"></span>
+  </section>
+
+  <section class="panel" id="result-panel" hidden>
+    <h2>3 · 決策結果</h2>
+    <div id="summary" class="summary"></div>
+    <details>
+      <summary>原始 JSON 回應</summary>
+      <pre id="raw"></pre>
+    </details>
+  </section>
+</main>
+
+<footer class="wrap">
+  <p>教學/研究用途的第三方整合（非官方）。官方文件：<a href="https://typesafe.ai" target="_blank" rel="noopener">typesafe.ai</a> · <a href="https://docs.typesafe.ai" target="_blank" rel="noopener">docs.typesafe.ai</a></p>
+</footer>
+
+<script src="/app.js"></script>
+</body>
+</html>
