@@ -89,7 +89,7 @@ function renderModeBanner() {
     dot.style.background = "var(--ok)";
     $("#mode-text").textContent = "真實模式：已偵測到後端 proxy，將由本機伺服器呼叫 api.typesafe.ai。";
   }
-  $("#conn-msg").textContent = mode === "static" ? "Token 僅存於本瀏覽器 localStorage，不會外送。" : "此模式由後端 proxy 處理金鑰，前端不需填 Token。";
+  $("#conn-msg").textContent = mode === "static" ? "Token 存於本瀏覽器 localStorage；送出時會以 Bearer header 傳給所選端點。" : "此模式由後端 proxy 處理金鑰，前端不需填 Token。";
 }
 
 /* ── 問題列 ─────────────────────────────── */
@@ -316,7 +316,7 @@ function renderResult(data) {
       meta = `信心值 ${ans.confidence ?? "—"}`;
     } else if (ans.type === "score") {
       val = ans.score ?? "—";
-      meta = `有序等級上的機率加權位置 · 信心值 ${ans.confidence ?? "—"}`;
+      meta = `機率加權的有序等級位置（不是信心值）· 獨立信心欄位 ${ans.confidence ?? "—"}`;
     }
     card.append(el("div", { class: "val" }, String(val)));
     if (meta) card.append(el("div", { class: "meta" }, meta));

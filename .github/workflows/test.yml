@@ -1,4 +1,4 @@
-name: Demo tests
+name: Demo checks
 
 on:
   pull_request:
@@ -18,7 +18,32 @@ jobs:
         uses: actions/checkout@v4
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.3
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile
+      - name: Typecheck Hono app
+        run: bun run typecheck
+      - name: Bundle Hono app
+        run: bun build src/index.ts --target=bun --outdir "$RUNNER_TEMP/jev-demo-build"
       - name: Run offline policy tests
         run: bun run test
       - name: Check browser JavaScript syntax
         run: node --check public/app.js
+      - name: Smoke test local mock API
+        run: |
+          PORT=41739 env -u TYPESAFE_API_KEY bun run start >"$RUNNER_TEMP/jev-demo-server.log" 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+
+          for attempt in $(seq 1 20); do
+            if health=$(curl -fsS http://127.0.0.1:41739/api/health); then
+              break
+            fi
+            sleep 1
+          done
+          node -e 'const h=JSON.parse(process.argv[1]); if (!h.ok || !h.mock || h.key_set) process.exit(1)' "$health"
+
+          payload='{"model":"jev-latest","state":"Synthetic CI smoke case","questions":{"topic":{"type":"choice","instructions":"Choose a synthetic route.","criteria":{"routine":"Synthetic routine","unknown":"Unknown"}}}}'
+          response=$(curl -fsS -H 'Content-Type: application/json' -d "$payload" http://127.0.0.1:41739/api/systemone)
+          node -e 'const r=JSON.parse(process.argv[1]); if (r.model !== "jev-mock (離線模擬)" || r.answers?.topic?.type !== "choice" || !r.usage) process.exit(1)' "$response"

@@ -1,7 +1,7 @@
 # Jevai：TypeSafe AI 的 System One 決策模型 — 正體中文參考文件
 
-> 本倉庫是 **Jev 1.13**（TypeSafe AI 推出的第一款 **System One 決策模型**）的正體中文整合參考文件。
-> 內容整合自底下兩份公開社群文件，並以正體中文翻譯、統整：
+> 本倉庫是 **Jev 1.13**（TypeSafe AI 的 System One 決策模型）的第三方正體中文研究整合與示範程式；不是 TypeSafe AI 的官方文件。
+> 內容參照公開社群文件與產品官方文件，並以正體中文整理：
 
 | 來源 | 倉庫 | 內容 |
 |------|------|------|
@@ -11,6 +11,8 @@
 > 🧪 **想直接動手試？** 本倉庫附一個 **bun + hono 的 fullstack demo 網站**（`demo/`），可編輯 state 與問題、即時查看決策結果；有 API 金鑰就真實呼叫，沒金鑰也有離線模擬模式。
 > 也可在 **GitHub Pages 線上試用** → **https://tboydar.github.io/jevai-typesafe-info-zh-tw/**
 > 見 [`demo/README.md`](demo/README.md)。
+
+> **實作範圍：** 此 repo 沒有模型分類器、跨供應商路由服務或 agent executor。`demo/src/routing-policy.ts` 是離線參考 helper，尚未串接 Hono API；子代理配額只是未實作的設計建議，不會限制 Claude Code、Codex、Pi 或其他 executor。
 
 ---
 
@@ -34,8 +36,10 @@ TypeSafe 將 System One 定位為供程式呼叫的決策模型：請求指定 s
 | type | 回傳 | 用途 |
 |------|------|------|
 | `choice` | 255 個選項中選一 + 各選項機率 | 路由、分類 |
-| `score` | 依 2–10 個有序 levels 回傳 0 起始的加權位置，可為小數 | 風險、急迫性、品質、契合度 |
+| `score` | 依 2–10 個有序 levels 回傳 0 起始的機率加權位置，可為小數；`confidence` 是另一個欄位 | 風險、急迫性、品質、契合度 |
 | `noul` | 是/否問題的 yes 機率 0–1，沒有獨立信心欄位 | 閘門（gate）、過濾、護欄（guardrail） |
+
+`score` 是有序等級上的位置，不是機率、信心值或校準信心；`confidence` 另行回傳，仍不保證個案正確或適合直接採取高影響動作。請同時檢視選項/等級機率分布，並用自己的標註資料與 holdout 驗證門檻。
 
 每個問題都提供 `type` 與 `instructions`，再加上自己的 `criteria` 形狀；所有問題**並行解析**，共享同一份 state。
 
@@ -51,7 +55,7 @@ TypeSafe 將 System One 定位為供程式呼叫的決策模型：請求指定 s
 
 - **不生成自由文字** — 回傳型別化欄位；API 錯誤或語意判斷仍需處理
 - **固定回應欄位** — 有助於減少文字解析；仍要處理拒答、錯誤與語意錯判
-- **輸出隨原語而異** — Choice/Score 提供機率分布與信心值；Noul 提供 yes 機率，沒有獨立信心值
+- **輸出隨原語而異** — Choice/Score 提供機率分布與獨立的信心欄位；Score 數值本身不是信心值。Noul 提供 yes 機率，沒有獨立信心值
 - **只有三種原語** — noul、choice、score
 - **所有問題並行解析** — 對同一份共享 state
 - **沒有取樣旋鈕** — temperature 與 top_p 不適用
@@ -150,7 +154,7 @@ curl -X POST https://api.typesafe.ai/v1/systemone \
 
 | 功能 | 本機 `bun run dev` | GitHub Pages 靜態 |
 |------|------------------|-------------------|
-| API Token | 由後端讀 `TYPESAFE_API_KEY` | 使用者在網頁「連線設定」填入（存 localStorage） |
+| API Token | 由後端讀 `TYPESAFE_API_KEY` | 使用者在網頁填入並存於 localStorage；送出時由瀏覽器以 Bearer header 傳給所選端點 |
 | 端點選擇 | 固定官方端點 | 可選**官方端點**或**填自訂端點** |
 | 無金鑰 | 離線模擬模式 | 需填 Token 才能呼叫 |
 | CORS | 由後端 proxy 解決 | 靠 API 允許跨域（自訂端點若擋 CORS 則無法直接呼叫） |
