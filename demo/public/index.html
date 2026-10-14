@@ -12,7 +12,8 @@
   <div class="wrap">
     <div class="eyebrow">Jevai · TypeSafe AI — System One 決策模型</div>
     <h1>Jev 決策測試台</h1>
-    <p class="lede">給 Jev 一段程式狀態（state）與幾個問題，立即查看它回傳的<strong>型別化、校準化決策</strong>。</p>
+    <p class="lede">輸入 state 與問題，檢視 System One 型別化回應。機率與信心欄位依原語而異；語意正確性仍須自行驗證。</p>
+    <p class="hint"><strong>實作範圍：</strong>本頁送出 Jev 請求，不會替工作分類或跨供應商選模型。repo 的 <code>routing-policy.ts</code> 是未串接 API 的離線 helper；也沒有 agent executor 或子代理硬限制。<code>score</code> 是機率加權的等級位置，不是信心值。</p>
     <div id="mode-banner" class="banner" hidden>
       <span id="mode-dot"></span><span id="mode-text"></span>
     </div>
@@ -24,7 +25,7 @@
     <div class="row-head">
       <h2>⚙ 連線設定</h2>
       <details id="conn-help"><summary>說明</summary>
-        <p class="hint">API Token 只存在你的瀏覽器（localStorage），不會送出給任何伺服器。端點可選預設官方端點，或自行填寫。</p>
+        <p class="hint">API Token 保存在目前瀏覽器（localStorage）。送出請求時，瀏覽器會用 Bearer header 傳給你選擇的端點；GitHub Pages 靜態頁不會先經過本 repo 後端。端點可選官方端點或自行填寫。</p>
       </details>
     </div>
     <div class="conn-grid">

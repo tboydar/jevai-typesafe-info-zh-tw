@@ -1,12 +1,34 @@
-/** 與 TypeSafe /v1/systemone API 對應的型別定義 */
+/** TypeSafe /v1/systemone request / response shape，依官方文件查核 */
 
 export type QuestionType = "noul" | "choice" | "score";
 
-export interface Question {
-  type: QuestionType;
+export type CriteriaValue =
+  | string
+  | Record<string, unknown>
+  | unknown[]
+  | null;
+
+export interface NoulQuestion {
+  type: "noul";
   instructions: string;
-  criteria?: Record<string, string>;
+  criteria?: { true?: string; false?: string };
 }
+
+export interface ChoiceQuestion {
+  type: "choice";
+  instructions: string;
+  criteria: Record<string, CriteriaValue>;
+}
+
+export type ScoreLevel = CriteriaValue;
+
+export interface ScoreQuestion {
+  type: "score";
+  instructions: string;
+  criteria: ScoreLevel[];
+}
+
+export type Question = NoulQuestion | ChoiceQuestion | ScoreQuestion;
 
 export interface SystemOneRequest {
   model: string;
@@ -14,7 +36,7 @@ export interface SystemOneRequest {
   questions: Record<string, Question>;
 }
 
-/** Jev 各原語的回答型別 */
+/** Jev 回應欄位；Noul 沒有獨立 confidence 欄位。 */
 export interface NoulAnswer {
   type: "noul";
   noul: number;

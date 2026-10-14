@@ -1,7 +1,7 @@
 # Jevai：TypeSafe AI 的 System One 決策模型 — 正體中文參考文件
 
-> 本倉庫是 **Jev 1.13**（TypeSafe AI 推出的第一款 **System One 決策模型**）的正體中文整合參考文件。
-> 內容整合自底下兩份公開社群文件，並以正體中文翻譯、統整：
+> 本倉庫是 **Jev 1.13**（TypeSafe AI 的 System One 決策模型）的第三方正體中文研究整合與示範程式；不是 TypeSafe AI 的官方文件。
+> 內容參照公開社群文件與產品官方文件，並以正體中文整理：
 
 | 來源 | 倉庫 | 內容 |
 |------|------|------|
@@ -12,18 +12,20 @@
 > 也可在 **GitHub Pages 線上試用** → **https://tboydar.github.io/jevai-typesafe-info-zh-tw/**
 > 見 [`demo/README.md`](demo/README.md)。
 
+> **實作範圍：** 此 repo 沒有模型分類器、跨供應商路由服務或 agent executor。`demo/src/routing-policy.ts` 是離線參考 helper，尚未串接 Hono API；子代理配額只是未實作的設計建議，不會限制 Claude Code、Codex、Pi 或其他 executor。
+
 ---
 
 ## Jev 是什麼？
 
-一般的大型語言模型（LLM）設計來**跟人說話**。**Jev 設計來給機器呼叫**：你給它一些脈絡（你的程式狀態）以及你確實需要回答的問題，它回傳的是**結構化數值而不是散文**。因為答案的形狀由你的請求固定下來，Jev 無法幻覺出一個格式，也不可能吐出無效的型別。
+TypeSafe 將 System One 定位為供程式呼叫的決策模型：請求指定 state 與問題，API 依問題原語回傳型別化欄位。固定欄位形狀可減少格式解析工作，但**不保證語意判斷正確**；仍須用自己的標註資料驗證輸出並設計人工升級。
 
-**一句話總結：Jev 以語言模型的方式閱讀語言，但「不生成文字」— 它回傳帶校準機率與信心值的型別化答案，讓軟體可以直接採取行動。**
+**一句話總結：** Jev 回傳型別化決策值，不是文字生成；Choice 與 Score 有信心值，Noul 回傳 yes 機率而沒有獨立信心欄位。任何機率、信心或分數都不是正確性保證，也不應未經資料驗證就直接採取高影響動作。
 
-- **速度**：70–500 ms（可比任務上約比前沿 LLM 快 40–200 倍）
-- **成本**：$0.042 / 百萬 input tokens，輸出免費（約每筆決策 $0.0004）
-- **安全性**：不會幻覺出格式、不會有型別錯誤（結構上保證）
-- **開發者**：TypeSafe AI（由前 OpenAI 研究員 Diogo Almeida 創辦），2026 年 9 月推出
+- **延遲**：依模型版本、輸入和服務環境而異；本 repo 未做效能測試
+- **API 費率**：TypeSafe Models 頁於 2026-10-14 查核列出 Jev 每百萬 input tokens $0.042、output 免費；費率會變動，且無法只用每次請求固定估價
+- **輸出**：依 API schema 回傳型別化欄位；語意正確性仍需評估
+- **開發者**：TypeSafe AI；模型版本、API 行為與定價應以查核當日的官方文件為準
 
 ---
 
@@ -34,29 +36,31 @@
 | type | 回傳 | 用途 |
 |------|------|------|
 | `choice` | 255 個選項中選一 + 各選項機率 | 路由、分類 |
-| `score` | 2–10 級有序量表上的分數 | 風險、急迫性、品質、契合度 |
-| `noul` | 校準的 yes/no，以 0–1 機率表示 | 閘門（gate）、過濾、護欄（guardrail） |
+| `score` | 依 2–10 個有序 levels 回傳 0 起始的機率加權位置，可為小數；`confidence` 是另一個欄位 | 風險、急迫性、品質、契合度 |
+| `noul` | 是/否問題的 yes 機率 0–1，沒有獨立信心欄位 | 閘門（gate）、過濾、護欄（guardrail） |
+
+`score` 是有序等級上的位置，不是機率、信心值或校準信心；`confidence` 另行回傳，仍不保證個案正確或適合直接採取高影響動作。請同時檢視選項/等級機率分布，並用自己的標註資料與 holdout 驗證門檻。
 
 每個問題都提供 `type` 與 `instructions`，再加上自己的 `criteria` 形狀；所有問題**並行解析**，共享同一份 state。
 
 ```json
 { "type": "noul",   "noul": 0.29 }                        // 布林 · 機率 0–1
 { "type": "choice", "choice": "billing", "confidence": 1.0 } // 單選 · 最多 255 選項
-{ "type": "score",  "score": 3.0, "confidence": 1.0 }       // 序數 · 2–10 有序等級
+{ "type": "score",  "score": 1.43, "confidence": 0.35 }     // 有序位置；範圍依 level 數決定
 ```
 
 ---
 
 ## 核心特性
 
-- **不生成文字** — 沒有訊息、說明、摘要或���式碼
-- **不可能回傳無效形狀** — 輸出型別事先固定
-- **每次答案都有校準機率** + 信心值
+- **不生成自由文字** — 回傳型別化欄位；API 錯誤或語意判斷仍需處理
+- **固定回應欄位** — 有助於減少文字解析；仍要處理拒答、錯誤與語意錯判
+- **輸出隨原語而異** — Choice/Score 提供機率分布與獨立的信心欄位；Score 數值本身不是信心值。Noul 提供 yes 機率，沒有獨立信心值
 - **只有三種原語** — noul、choice、score
 - **所有問題並行解析** — 對同一份共享 state
 - **沒有取樣旋鈕** — temperature 與 top_p 不適用
-- **毫秒級而非秒級** — 延遲與輸出長度無關
-- **輸出免費** — 成本只隨 input tokens 而變
+- **效能需自行量測** — 本 repo 未做延遲或準確率 benchmark
+- **費用依官方即時 rate card** — 查核日的 Jev 僅 input tokens 計價；請再查官方 Models 頁
 
 ---
 
@@ -77,7 +81,7 @@ curl -X POST https://api.typesafe.ai/v1/systemone \
   }'
 ```
 
-回應：
+回應示意（數值只用來說明欄位，不是此 repo 執行的結果或正確性承諾）：
 
 ```json
 {
@@ -91,7 +95,7 @@ curl -X POST https://api.typesafe.ai/v1/systemone \
 }
 ```
 
-因為型別固定，你可以用純程式直接依結果分支 — `if (answers.urgent.noul > 0.7)` — 不需要解析、不需要 regex、沒有格式錯誤的風險。
+可以用程式讀取型別化欄位，但門檻與動作需先以本用途資料驗證；低信心、未知或缺少證據時應走人工覆核。
 
 ---
 
@@ -99,13 +103,12 @@ curl -X POST https://api.typesafe.ai/v1/systemone \
 
 | 屬性 | 一般 LLM | Jev 1.13 |
 |------|----------|----------|
-| 主要功能 | 文字生成 | 決策解析 |
-| 輸出形式 | 不受限制的散文或程式碼 | 每次呼叫固定 JSON schema |
-| 輸出成本 | 按生成的 token 計費 | 免費 |
-| 格式錯誤 | 可能發生；需要防禦式解析 | 結構上不可能 |
-| 信心值 | 不提供 | 校準值 + 機率分布 |
-| 延遲 | 秒級；隨輸出成長 | 毫秒級；平坦 |
-| 每多一個問題 | 延遲上升 | 免費；並行執行 |
+| 主要功能 | 對話/文字生成或結構化輸出，依產品而異 | typed decision primitives |
+| 輸出形式 | 可用 schema/function calling 約束，依 API 支援範圍而異 | Noul、Choice、Score 欄位 |
+| 語意正確性 | 需以應用資料評估 | 需以應用資料評估 |
+| 機率/信心 | 依模型與 API 介面而異，非通用保證 | Choice/Score 有 confidence；Noul 回傳 yes 機率 |
+| 費用 | 依模型、快取與部署 rate card | 依官方 Models 頁查核當日費率 |
+| 延遲 | 依模型、輸入與服務環境量測 | 依模型、輸入與服務環境量測 |
 | 適合 | 起草、解說、寫程式、對話 | 路由、分流、評分、閘門、審核 |
 
 ---
@@ -139,6 +142,7 @@ curl -X POST https://api.typesafe.ai/v1/systemone \
 - [demo/public/](demo/public/) — 純靜態前端（GitHub Pages 部署用，支援使用者自填 Token／端點）
 - [docs/04-use-cases.md](docs/04-use-cases.md) — 深入使用案例
 - [docs/sources.md](docs/sources.md) — 來源與整合說明、名詞對照
+- [docs/routing-policy.md](docs/routing-policy.md) — 分類標籤、路由/額度邊界、子代理政策與查核證據
 
 ---
 
@@ -150,7 +154,7 @@ curl -X POST https://api.typesafe.ai/v1/systemone \
 
 | 功能 | 本機 `bun run dev` | GitHub Pages 靜態 |
 |------|------------------|-------------------|
-| API Token | 由後端讀 `TYPESAFE_API_KEY` | 使用者在網頁「連線設定」填入（存 localStorage） |
+| API Token | 由後端讀 `TYPESAFE_API_KEY` | 使用者在網頁填入並存於 localStorage；送出時由瀏覽器以 Bearer header 傳給所選端點 |
 | 端點選擇 | 固定官方端點 | 可選**官方端點**或**填自訂端點** |
 | 無金鑰 | 離線模擬模式 | 需填 Token 才能呼叫 |
 | CORS | 由後端 proxy 解決 | 靠 API 允許跨域（自訂端點若擋 CORS 則無法直接呼叫） |

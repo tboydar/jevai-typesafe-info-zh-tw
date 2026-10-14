@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { serveStatic } from "hono/bun";
+import type { ContentfulStatusCode } from "hono/utils/http-status";
 import type { SystemOneRequest } from "./types";
 import { mockResponse } from "./mock";
 
@@ -48,7 +49,8 @@ app.post("/api/systemone", async (c) => {
   });
 
   const data = await res.json();
-  return c.json(data, res.status);
+  // Fetch gives a number; Hono requires a contentful HTTP status union for JSON.
+  return c.json(data, res.status as ContentfulStatusCode);
 });
 
 app.use("/*", serveStatic({ root: "./public" }));

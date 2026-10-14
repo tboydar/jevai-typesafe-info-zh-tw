@@ -2,11 +2,14 @@
   "name": "jevai-typesafe-info-zh-tw-demo",
   "version": "1.0.0",
   "description": "Jev / TypeSafe AI System One — fullstack demo site (bun + hono)",
+  "packageManager": "bun@1.4.3",
   "type": "module",
   "module": "src/index.ts",
   "scripts": {
     "dev": "bun run --hot src/index.ts",
-    "start": "bun run src/index.ts"
+    "start": "bun run src/index.ts",
+    "test": "bun test",
+    "typecheck": "bunx --package typescript@7.0.2 tsc --noEmit"
   },
   "dependencies": {
     "hono": "^4.6.0"

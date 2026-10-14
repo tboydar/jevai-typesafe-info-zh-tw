@@ -89,7 +89,7 @@ function renderModeBanner() {
     dot.style.background = "var(--ok)";
     $("#mode-text").textContent = "真實模式：已偵測到後端 proxy，將由本機伺服器呼叫 api.typesafe.ai。";
   }
-  $("#conn-msg").textContent = mode === "static" ? "Token 僅存於本瀏覽器 localStorage，不會外送。" : "此模式由後端 proxy 處理金鑰，前端不需填 Token。";
+  $("#conn-msg").textContent = mode === "static" ? "Token 存於本瀏覽器 localStorage；送出時會以 Bearer header 傳給所選端點。" : "此模式由後端 proxy 處理金鑰，前端不需填 Token。";
 }
 
 /* ── 問題列 ─────────────────────────────── */
@@ -97,7 +97,7 @@ function typeMeta(type) {
   return {
     noul: { label: "noul（是/否・0–1）", criteriaNeeded: false, criteriaPlaceholder: "(不需 criteria)" },
     choice: { label: "choice（選項）", criteriaNeeded: true, criteriaPlaceholder: '{"billing":"帳務問題","bug":"產品異常"}' },
-    score: { label: "score（分數・2–10）", criteriaNeeded: false, criteriaPlaceholder: "(選填)" },
+    score: { label: "score（有序量表・2–10 個等級）", criteriaNeeded: true, criteriaPlaceholder: '["輕微","中等","嚴重"]' },
   }[type];
 }
 
@@ -148,6 +148,9 @@ function addQuestionRow(def = null) {
   function refreshFields() {
     const m = typeMeta(row.type);
     crit.placeholder = m.criteriaPlaceholder;
+    critLabel.textContent = row.type === "score"
+      ? "criteria（JSON array；2–10 個有序等級）"
+      : "criteria（JSON 物件；choice 需 1–255 個選項）";
     critWrap.hidden = !m.criteriaNeeded;
   }
 
@@ -199,10 +202,22 @@ function buildRequest() {
   for (const row of questionRows) {
     const name = row.name.trim() || "q" + (questionRows.indexOf(row) + 1);
     const q = { type: row.type, instructions: row.instructions.trim() || "請判斷" };
-    if (row.type !== "noul" && row.criteria.trim()) {
+    if (row.type !== "noul") {
+      if (!row.criteria.trim()) {
+        setStatus(`問題「${name}」需要 criteria`, true);
+        return null;
+      }
       try { q.criteria = JSON.parse(row.criteria); }
       catch (e) {
         setStatus(`問題「${name}」的 criteria 不是合法 JSON：${e.message}`, true);
+        return null;
+      }
+      if (row.type === "choice" && (!q.criteria || Array.isArray(q.criteria) || typeof q.criteria !== "object" || Object.keys(q.criteria).length < 1 || Object.keys(q.criteria).length > 255)) {
+        setStatus(`問題「${name}」的 choice criteria 必須是 1–255 個選項的 JSON 物件`, true);
+        return null;
+      }
+      if (row.type === "score" && (!Array.isArray(q.criteria) || q.criteria.length < 2 || q.criteria.length > 10)) {
+        setStatus(`問題「${name}」的 score criteria 必須是 2–10 個有序等級的 JSON array`, true);
         return null;
       }
     }
@@ -265,7 +280,7 @@ async function run() {
 }
 
 /* ── 渲染結果 ───────────────────────────── */
-function renderProbs(probs) {
+function renderProbs(probs, legend = null) {
   if (!probs || typeof probs !== "object") return "";
   const keys = Object.keys(probs);
   if (!keys.length) return "";
@@ -275,7 +290,7 @@ function renderProbs(probs) {
     const rowEl = el("div", { class: "bar-row" });
     const bar = el("div", { class: "bar" });
     bar.append(el("i", { style: `width:${Math.round(v * 100)}%` }));
-    rowEl.append(el("span", { class: "bk" }, k), bar, el("span", {}, (v * 100).toFixed(0) + "%"));
+    rowEl.append(el("span", { class: "bk" }, legend?.[k] || k), bar, el("span", {}, (v * 100).toFixed(0) + "%"));
     bars.append(rowEl);
   }
   return bars;
@@ -295,18 +310,17 @@ function renderResult(data) {
     let val = "", meta = "";
     if (ans.type === "noul") {
       val = ans.noul;
-      meta = ans.noul > 0.7 ? "傾向「是」" : ans.noul < 0.3 ? "傾向「否」" : "不確定";
+      meta = "回答為「是」的機率；不是獨立信心值。門檻需依用途驗證。";
     } else if (ans.type === "choice") {
       val = ans.choice ?? "—";
       meta = `信心值 ${ans.confidence ?? "—"}`;
     } else if (ans.type === "score") {
       val = ans.score ?? "—";
-      const lv = Math.round(ans.score);
-      meta = `信心值 ${ans.confidence ?? "—"}` + (ans.legend?.[lv] ? ` · ${ans.legend[lv]}` : "");
+      meta = `機率加權的有序等級位置（不是信心值）· 獨立信心欄位 ${ans.confidence ?? "—"}`;
     }
     card.append(el("div", { class: "val" }, String(val)));
     if (meta) card.append(el("div", { class: "meta" }, meta));
-    const probs = renderProbs(ans.type === "choice" ? ans.probabilities : null);
+    const probs = renderProbs(ans.type === "choice" || ans.type === "score" ? ans.probabilities : null, ans.legend);
     if (probs) card.append(probs);
     summaryEl.append(card);
   }
