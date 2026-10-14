@@ -6,7 +6,8 @@
   "module": "src/index.ts",
   "scripts": {
     "dev": "bun run --hot src/index.ts",
-    "start": "bun run src/index.ts"
+    "start": "bun run src/index.ts",
+    "test": "bun test"
   },
   "dependencies": {
     "hono": "^4.6.0"
